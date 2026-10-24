@@ -1,6 +1,6 @@
 # Yamaha R-N301 · Loupedeck CT
 
-Direct LAN control for a **Yamaha R-N301 receiver from a Loupedeck CT** on Windows. A standalone plugin and project, independent of the Codex controller profile. No Home Assistant token, cloud account or keyboard macros are used for receiver control.
+Direct LAN control for a **Yamaha R-N301 receiver from a Loupedeck CT** on Windows. No Home Assistant token, cloud account or keyboard macros are used for receiver control.
 
 ![Full-size now-playing wheel](docs/icons/wheel-status.png)
 
@@ -16,7 +16,7 @@ Tested with one R-N301 and one Loupedeck CT. If you happen to own this unusually
 
 ## Use
 
-Select the **Windows default profile**, then press round button **3**. Application-specific profiles (including Codex) keep their own controls. The CT has four touchscreen columns and three rows; see [the complete mapping](LAYOUT.md).
+Open your **Yamaha** workspace in the Windows default profile. The reference layout assigns it to round button **3**; a manual installation can use any free button. Other application profiles keep their own controls. The CT has four touchscreen columns and three rows; see [the complete mapping](LAYOUT.md).
 
 - Large wheel: volume in single steps, with immediate amber arc feedback. No duplicate volume number in the center.
 - Wheel screen: source, large station name, and the song/program metadata supplied by the receiver. Lower left/right touch targets select previous/next; the center toggles playback.
@@ -61,6 +61,32 @@ Match that identity to the correct physical device. For a manually created works
 
 Radio buttons use the eight station names in `settings.json`. They must already exist in your YCast **My Stations → Bookmarks** menu, with matching names. This plugin does not install/configure YCast or provide radio streams.
 
+## Choose your own radio stations
+
+### Select a station while listening
+
+Tap its touchscreen button. Alternatively, turn the **lower-left dial**, press the physical **left/right arrows**, or touch the wheel's lower **previous/next** symbols to step through your configured favorites. These controls navigate radio favorites when the active input is NET RADIO. To choose a saved **FM** station, open **Meedia / FM** and tap a receiver preset.
+
+### Change the eight touchscreen favorites
+
+There is currently **no station-configuration picker in Loupedeck** and no built-in radio catalogue. The eight buttons are configured by name:
+
+1. First add the stations you want to your existing YCast **My Stations → Bookmarks** list. Confirm each station plays on the receiver.
+2. Stop the Logi/Loupedeck service before editing its settings. If Options+ automatically restarts that service, stop its background agent too. The running plugin periodically saves settings, so editing the file while it is running can overwrite your changes.
+3. Back up `%LOCALAPPDATA%\YamahaDirect\settings.json`.
+4. Edit only its `Stations` array, keeping **eight station names** that match your YCast bookmarks. Keep `Host`, `SystemId` and the other settings intact. For example:
+
+   ```json
+   "Stations": [
+     "Sky Plus", "Raadio 2", "Raadio Kuku", "Vikerraadio",
+     "Power Hit Radio", "Raadio Elmar", "NRJ", "Star FM"
+   ]
+   ```
+
+5. Start the service again and reopen the Yamaha workspace. The array order maps to the touchscreen from **left to right**: the first four names form the second row, and the last four form the third row. The same order is used by previous/next navigation.
+
+The names above are examples, not a required station list. Put other existing bookmark names in the same slots to use your own choices. Stream URLs belong in YCast, **not** in this plugin's `Stations` array. FM presets are read from the receiver rather than from this array.
+
 ## Build from source
 
 Editable C# sources are in `Yamaha.Core/` and `Yamaha.Loupedeck/`; editable Lucide SVG geometry and its license are in `icons/`. The vector/raster compositions and colors are in `Yamaha.Loupedeck/Artwork.cs`. The full 240px wheel is a custom `WheelToolYamahaNowPlaying`, not a stock icon template.
@@ -81,7 +107,7 @@ This helper targets the original author's existing Windows profile and arrow-act
 .\tools\install.ps1 -ReceiverHost '<receiver IPv4>' -SystemId '<receiver System_ID>'
 ```
 
-The installer backs up the System profile, any existing Codex profile, local plugins, Yamaha settings and Loupedeck settings before editing anything. It stages from the current profile, refuses an unexpected workspace layout or occupied button 3/arrow mappings, and checks that unrelated settings are identical. It then briefly stops/restarts the Loupedeck service and configuration UI. No Codex installation is required.
+The installer backs up the System profile, local plugins, Yamaha settings and Loupedeck settings before editing anything; it also preserves the original setup's separately backed-up application profile. It stages from the current profile, refuses an unexpected workspace layout or occupied button 3/arrow mappings, and checks that unrelated settings are identical. It then briefly stops/restarts the Loupedeck service and configuration UI.
 
 Do not run it blindly against another user's profile. To adapt the merge helper, inspect your profile's existing arrow actions and choose the desired workspace button in `tools/prepare_profile.py`, after backing up that profile.
 
@@ -95,7 +121,7 @@ Run `python .\tools\export_installed.py` after building/installing to create:
 - `dist/Yamaha-installed.LP4`: the current complete System profile recovery export. It includes your two original workspaces, so treat it as personal data.
 - `.local/SHA256SUMS.txt`: checksums for both archives.
 
-To recover this machine, back up the current configuration again, install/import the plugin first, then import the LP4 using Loupedeck's profile import UI and restore the private Yamaha settings if necessary. Check the imported profile before selecting it. For full file-level rollback, stop Loupedeck and its service (including the Options+ watchdog), restore the matching `System`, `Plugins`, Yamaha settings and `LoupedeckSettings.ini` snapshot, then restart them. Do not overwrite newer Codex changes with an old backup.
+To recover this machine, back up the current configuration again, install/import the plugin first, then import the LP4 using Loupedeck's profile import UI and restore the private Yamaha settings if necessary. Check the imported profile before selecting it. For full file-level rollback, stop Loupedeck and its service (including the Options+ watchdog), restore the matching `System`, `Plugins`, Yamaha settings and `LoupedeckSettings.ini` snapshot, then restart them. Do not overwrite newer application-profile changes with an old backup.
 
 ## Verification and limitations
 

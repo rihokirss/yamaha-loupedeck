@@ -7,7 +7,7 @@
 - Immediate volume target/event is asserted **before the receiver round-trip**.
 - `Yamaha.Preview`: real installed SDK callback bridge verifies all seven action/folder subscriptions before `Plugin.Load`, all three dial value notifications, the dedicated immediate-volume notification, and friendly station captions instead of `station0` etc.
 - The native service returns the custom full-size wheel image successfully. The registered template is `YamahaDirect___WheelToolYamahaNowPlaying`; the installed plugin reports `Normal / Plugin successfully loaded`.
-- `verify_install.py` compares all unrelated System content against the pre-install snapshot, checks the complete Codex file tree, the intended two contextual arrow bindings, custom wheel template and installed DLL hashes. Machine-specific results remain in `.local/verification.json`.
+- `verify_install.py` compares all unrelated System content against the pre-install snapshot, checks the original setup's separately backed-up application-profile tree, the intended two contextual arrow bindings, custom wheel template and installed DLL hashes. Machine-specific results remain in `.local/verification.json`.
 
 ## Real receiver checks completed
 

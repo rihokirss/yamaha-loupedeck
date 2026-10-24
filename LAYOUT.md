@@ -31,4 +31,4 @@ NET RADIO: previous/next wrap the eight configured favorites. TUNER: navigate ac
 
 Black background, unboxed Lucide geometry. Power is green, mute/volume amber, inputs violet, media/track rose. Radio and FM preset icons are white; an active station has an amber glow and dot. The wheel uses warm cream main text, muted lavender secondary text, an amber/coral volume arc, and a violet arc while muted. The number remains beside L1 rather than duplicating it in the wheel center.
 
-The two original Windows workspaces and their touch/encoder/wheel pages are retained. Shared square-button left/right presses now route by the active workspace; all their Fn mappings and other square buttons remain unchanged. The Codex profile is separate and is not edited.
+The two original Windows workspaces and their touch/encoder/wheel pages are retained. Shared square-button left/right presses now route by the active workspace; all their Fn mappings and other square buttons remain unchanged. Other application profiles are not edited.
