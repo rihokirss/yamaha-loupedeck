@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <AssemblyName>YamahaDirectPlugin</AssemblyName><RootNamespace>Loupedeck.YamahaDirectPlugin</RootNamespace>
+    <PluginApiDir Condition="'$(PluginApiDir)' == ''">C:\Program Files\Logi\LogiPluginService</PluginApiDir>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Yamaha.Core\Yamaha.Core.csproj" />
+    <Reference Include="PluginApi"><HintPath>$(PluginApiDir)\PluginApi.dll</HintPath><Private>false</Private></Reference>
+    <EmbeddedResource Include="..\icons\*.svg" Link="icons\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

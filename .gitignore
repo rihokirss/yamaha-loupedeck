@@ -1,0 +1,21 @@
+# Build output and local tooling
+**/bin/
+**/obj/
+.tmp/
+__pycache__/
+*.py[cod]
+.vs/
+.vscode/
+.idea/
+
+# Personal receiver identity, full profiles and rollback snapshots
+.local/
+backups/
+dist/Yamaha-installed.LP4
+dist/YamahaDirect/
+dist/YamahaDirect.lplug4
+dist/SHA256SUMS.txt
+
+# OS noise
+Thumbs.db
+.DS_Store
