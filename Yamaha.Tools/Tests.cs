@@ -4,7 +4,7 @@ using Yamaha.Core;
 internal static class Tests
 {
     private static int _passed;
-    private static void Assert(bool ok, string message) { if (!ok) throw new Exception("FAIL " + message); Console.WriteLine("PASS " + message); _passed++; }
+    internal static void Assert(bool ok, string message) { if (!ok) throw new Exception("FAIL " + message); Console.WriteLine("PASS " + message); _passed++; }
     private static Receiver Make(FakeTransport transport) => new(new ReceiverSettings { Host = "127.0.0.1", SystemId = "TEST" }, transport);
     public static async Task Run()
     {
@@ -50,7 +50,59 @@ internal static class Tests
         Assert(!Discovery.Matches(r.Settings, wrong), "discovery excludes another R-N301 identity");
         Assert(f.MaxConcurrency == 1, "receiver operations serialize requests");
         Assert(XmlValue.Clean("PÃ¤ev") == "Päev" && XmlValue.Clean("Päev") == "Päev", "metadata encoding repair preserves good Estonian text");
+        TestSourceControls();
+        await TestContextExecution();
+        await RdsTests.Run();
         Console.WriteLine($"{_passed}/{_passed} checks passed");
+    }
+
+    private static void TestSourceControls()
+    {
+        var settings = new ReceiverSettings();
+        PresetItem[] presets = [new(1, "1 : FM 95.40 MHz"), new(4, "4 : FM 101,6 MHz")];
+        var state = new ReceiverState(Available: true, Power: true, Input: "NET RADIO", Station: "Raadio Kuku", Playback: "Play");
+        var radio = SourceControls.Slots(state, settings, presets);
+        Assert(radio.Length == 8 && radio.Select(a => a.Label).SequenceEqual(settings.Stations) && radio.Single(a => a.Active).Label == "Raadio Kuku", "NET RADIO slots use configured favorite order and live highlight");
+        Assert(SourceControls.Menu(state, settings, presets).All(a => !a.Id.StartsWith("preset:")), "NET RADIO menu contains no FM presets");
+        var fm = SourceControls.Slots(state with { Input = "TUNER", Preset = 4 }, settings, presets);
+        Assert(fm[0].Id == "preset:1" && fm[1].Id == "preset:4" && fm[1].Active && fm[0].Detail == "95.4" && fm[1].Detail == "101.6" && fm.Skip(2).All(a => !a.Enabled), "TUNER uses actual IDs, normalized frequency labels and blank unused slots");
+        Assert(SourceControls.Menu(state with { Input = "TUNER" }, settings, presets).Length == 2, "TUNER menu contains only actual stored FM presets");
+        var server = SourceControls.Slots(state with { Input = "SERVER", Shuffle = "On", Repeat = "One" }, settings, presets);
+        Assert(server.Take(6).Select(a => a.Id).SequenceEqual(new[] { "previous", "play", "next", "stop", "shuffle", "repeat" }) && server[4].Active && server[5].Label == "Korda ühte" && server.Skip(6).All(a => !a.Enabled), "SERVER has six contextual controls and two blank slots");
+        foreach (var input in new[] { "Spotify", "AirPlay" })
+        {
+            var media = SourceControls.Slots(state with { Input = input }, settings, presets);
+            Assert(media.Take(4).All(a => a.Enabled) && media.Skip(4).All(a => !a.Enabled) && SourceControls.Menu(state with { Input = input }, settings, presets).Length == 4, input + " has four transport controls, no FM or SERVER modes");
+        }
+        Assert(new[] { "CD", "OPTICAL", "COAXIAL", "LINE1", "LINE2", "LINE3" }.All(input => SourceControls.Slots(state with { Input = input }, settings, presets).All(a => !a.Enabled) && SourceControls.Menu(state with { Input = input }, settings, presets).Length == 0), "passive inputs have eight inactive slots and no media menu");
+        Assert(SourceControls.Slots(state with { Available = false }, settings, presets).All(a => !a.Enabled) && SourceControls.Menu(state with { Available = false }, settings, presets).Length == 0, "offline blanks controls instead of retaining stale commands");
+        Assert(SourceControls.Slots(state with { Power = false }, settings, presets).All(a => a.Enabled && !a.Active) && SourceControls.Slots(state with { Power = false, Input = "SERVER" }, settings, presets).All(a => !a.Enabled), "standby keeps radio wake shortcuts but disables transport");
+        Assert(SourceControls.ResolveMenu(SourceControls.Menu(state, settings, presets)[0].Token, state with { Input = "Spotify" }, settings, presets) == null, "dynamic folder tokens cannot resolve on a different input");
+    }
+
+    private static async Task TestContextExecution()
+    {
+        var f = new FakeTransport(); using var r = Make(f); await r.RefreshAsync();
+        var radio = SourceControls.Slots(r.State, r.Settings, r.Presets)[2];
+        f.Input = "OPTICAL"; var count = f.Writes.Count; var cancelled = false;
+        try { await r.ExecuteContextAsync(radio); } catch (ReceiverException) { cancelled = true; }
+        Assert(cancelled && f.Writes.Count == count && r.State.Input == "OPTICAL", "stale favorite press re-reads actual external input and sends no PUT");
+        f.Input = "TUNER"; await r.RefreshAsync();
+        var preset = SourceControls.Slots(r.State, r.Settings, r.Presets)[1];
+        f.Input = "NET RADIO"; count = f.Writes.Count; cancelled = false;
+        try { await r.ExecuteContextAsync(preset); } catch (ReceiverException) { cancelled = true; }
+        Assert(cancelled && f.Writes.Count == count, "stale FM press cannot switch a newly selected source back to TUNER");
+        await r.ExecuteContextAsync(radio);
+        Assert(r.State.Station == "Raadio Kuku" && r.State.Input == "NET RADIO", "valid context favorite executes by configured station name");
+        f.Input = "TUNER"; await r.RefreshAsync(); count = f.Writes.Count;
+        await r.ExecuteContextAsync(SourceControls.Slots(r.State, r.Settings, r.Presets)[1]);
+        Assert(r.State.Preset == 4 && f.Writes.Skip(count).All(x => !x.Contains("Input_Sel")), "valid context FM selection uses actual preset ID without changing input");
+        f.Input = "SERVER"; await r.RefreshAsync();
+        await r.ExecuteContextAsync(SourceControls.Menu(r.State, r.Settings, r.Presets).Single(a => a.Id == "shuffle"));
+        await r.ExecuteContextAsync(SourceControls.Menu(r.State, r.Settings, r.Presets).Single(a => a.Id == "repeat"));
+        Assert(r.State.Shuffle == "On" && r.State.Repeat == "One", "SERVER context actions update live shuffle and repeat feedback");
+        f.Power = false; await r.RefreshAsync(); count = f.Writes.Count;
+        Assert(SourceControls.Slots(r.State, r.Settings, r.Presets).All(a => !a.Enabled) && f.Writes.Count == count, "standby context rendering does not issue receiver commands");
     }
 }
 
@@ -59,9 +111,10 @@ internal sealed class FakeTransport : IYamahaTransport
     public bool Power = true, Muted, FailNext, RaceOnSelection;
     public int Volume = 14, Preset = 1, Layer = 1, Busy, Reads, MaxConcurrency;
     private int _concurrent;
-    public string Input = "NET RADIO", Station = "Sky Plus", Playback = "Play";
+    public string Input = "NET RADIO", Station = "Sky Plus", Playback = "Play", Shuffle = "Off", Repeat = "Off";
     public List<string> Writes = [];
     public List<DateTime> VolumeTimes = [];
+    public XElement? TunerInfo;
     private readonly string[] _stations = new ReceiverSettings().Stations;
     public async Task<XElement> RequestAsync(string host, XElement request, CancellationToken ct)
     {
@@ -81,6 +134,8 @@ internal sealed class FakeTransport : IYamahaTransport
                 v = request.Descendants("Mute").FirstOrDefault(); if (v != null) Muted = v.Value == "On";
                 v = request.Descendants("Playback").FirstOrDefault(); if (v != null) Playback = v.Value;
                 v = request.Descendants("Preset_Sel").FirstOrDefault(); if (v != null) Preset = int.Parse(v.Value);
+                v = request.Descendants("Shuffle").FirstOrDefault(); if (v != null) Shuffle = v.Value;
+                v = request.Descendants("Repeat").FirstOrDefault(); if (v != null) Repeat = v.Value;
                 v = request.Descendants("Cursor").FirstOrDefault(); if (v != null) Layer = Math.Max(1, Layer - 1);
                 v = request.Descendants("Direct_Sel").FirstOrDefault();
                 if (v != null)
@@ -101,6 +156,7 @@ internal sealed class FakeTransport : IYamahaTransport
             if (request.Descendants("Basic_Status").Any()) return XElement.Parse($"<YAMAHA_AV RC='0'><Main_Zone><Basic_Status><Power_Control><Power>{(Power ? "On" : "Standby")}</Power></Power_Control><Volume><Lvl><Val>{Volume}</Val></Lvl><Mute>{(Muted ? "On" : "Off")}</Mute></Volume><Input><Input_Sel>{Input}</Input_Sel></Input></Basic_Status></Main_Zone></YAMAHA_AV>");
             if (request.Descendants("List_Info").Any())
             {
+                if (request.Element("SERVER") != null) return XElement.Parse("<YAMAHA_AV RC='0'><SERVER><List_Info><Menu_Status>Ready</Menu_Status><Menu_Layer>3</Menu_Layer><Menu_Name>Test Album</Menu_Name><Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position><Current_List><Line_1><Txt>Test Song</Txt><Attribute>Item</Attribute></Line_1></Current_List></List_Info></SERVER></YAMAHA_AV>");
                 Reads++;
                 var layer = RaceOnSelection && Reads > 1 ? 9 : Layer;
                 var names = layer == 1 ? new[] { "Radiobrowser", "My Stations" } : layer == 2 ? new[] { "Bookmarks" } : _stations;
@@ -109,7 +165,8 @@ internal sealed class FakeTransport : IYamahaTransport
             if (request.Descendants("Play_Info").Any())
             {
                 var tag = request.Elements().First().Name;
-                return Wrap(new XElement(tag, new XElement("Play_Info", new XElement("Playback_Info", Playback), new XElement("Preset", new XElement("Preset_Sel", Preset)), new XElement("Meta_Info", new XElement("Station", Station), new XElement("Song", "Test Song")))));
+                if (tag == "Tuner" && TunerInfo != null) return Wrap(new XElement(tag, new XElement(TunerInfo)));
+                return Wrap(new XElement(tag, new XElement("Play_Info", new XElement("Playback_Info", Playback), new XElement("Play_Mode", new XElement("Shuffle", Shuffle), new XElement("Repeat", Repeat)), new XElement("Preset", new XElement("Preset_Sel", Preset)), new XElement("Meta_Info", new XElement("Station", Station), new XElement("Song", "Test Song")))));
             }
             throw new Exception("Unknown fake request: " + request);
         }

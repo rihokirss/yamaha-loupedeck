@@ -6,7 +6,7 @@ Direct LAN control for a **Yamaha R-N301 receiver from a Loupedeck CT** on Windo
 
 Tested with one R-N301 and one Loupedeck CT. If you happen to own this unusually specific combination too, this may save you some work. Other Yamaha models and Loupedeck devices are not claimed to work.
 
-| Power | Mute | Inputs | Media / FM |
+| Power | Mute | Inputs | Media |
 |:---:|:---:|:---:|:---:|
 | ![Power](docs/icons/button-01.png) | ![Mute](docs/icons/button-02.png) | ![Inputs](docs/icons/button-03.png) | ![Media](docs/icons/button-04.png) |
 | Sky Plus | Raadio 2 | Raadio Kuku (active) | Vikerraadio |
@@ -23,6 +23,8 @@ Open your **Yamaha** workspace in the Windows default profile. The reference lay
 - Upper-left dial: volume number, or `Mute`, `Off`, `Offline`; press to mute. Muting changes the arc to violet.
 - Power button and wheel status: green **SEES** (on), gray **OOTEL** (standby), red **ÜHENDUS PUUDUB** (no connection). A disconnected receiver is never presented as merely in standby, even if its last known power state was on.
 - Radio favorites: white Lucide icons. The active playing station has an amber glow and dot. Green power, amber mute, violet inputs and rose media retain separate functional colors.
+- The lower eight touchscreen buttons follow the confirmed active input: NET RADIO favorites, TUNER stored FM presets, SERVER transport plus shuffle/repeat, or Spotify/AirPlay transport. Passive inputs and unavailable actions leave black, inactive slots. **Meedia** also follows the source and shows FM presets only on TUNER. See [the source-by-source table](LAYOUT.md).
+- FM RDS: the wheel shows the station's Program Service name and current Radio Text (A, or B when A is empty). Preset buttons and the FM menu learn station names while you listen; frequency remains visible and no background station scan is performed.
 - Physical left/right arrows: previous/next only while the Yamaha workspace is active. Elsewhere they send normal left/right arrow keys; their Fn actions are unchanged. If workspace detection fails, they fall back to normal arrows.
 
 The volume ring is a **0–100 receiver control scale**, not a sound-pressure meter. Metadata availability and freshness depend on the selected source and radio stream. NET RADIO does not implement native Pause/Skip: stopping/resuming reselects the last favorite, and previous/next navigate the configured favorites.
@@ -46,7 +48,7 @@ Start from [settings.example.json](settings.example.json) only for a new install
 1. Export your current Loupedeck profiles and keep a backup of `%LOCALAPPDATA%\Logi\LogiPluginService` before making changes.
 2. Download `YamahaDirect.lplug4` from [Releases](https://github.com/rihokirss/yamaha-loupedeck/releases). Open it using Loupedeck's plugin installer. Restart the Logi/Loupedeck service if the plugin does not appear. The release package does **not** include anyone's personal profile or receiver settings.
 3. Copy `settings.example.json` to `%LOCALAPPDATA%\YamahaDirect\settings.json`, filling in your receiver's IPv4 `Host` and exact `SystemId`. The `Model` must remain `R-N301`. Restart the service after editing settings. No HA token is needed.
-4. In the Windows default profile, create a new workspace named **Yamaha**. Assign the plugin's actions using [LAYOUT.md](LAYOUT.md). Choose **Yamaha · Hi-Fi** as its wheel template, volume adjustment **Yamaha Volume**, and actions **Eelmine**, **Esita / peata**, **Järgmine** in that order.
+4. In the Windows default profile, create a new workspace named **Yamaha**. Assign the plugin's actions using [LAYOUT.md](LAYOUT.md); use **Yamaha · aktiivne sisend → Sisendinupp 1–8** for the lower eight touchscreen positions. Choose **Yamaha · Hi-Fi** as its wheel template, volume adjustment **Yamaha Volume**, and actions **Eelmine**, **Esita / peata**, **Järgmine** in that order.
 5. Assign a free round button to the new workspace. Start at a low volume and test power, mute and a single volume step first. Verify your existing workspaces still work.
 
 To read the identity from a receiver at a known IP, this is a **read-only** request:
@@ -66,7 +68,7 @@ Radio buttons use the eight station names in `settings.json`. They must already 
 
 ### Select a station while listening
 
-Tap its touchscreen button. Alternatively, turn the **lower-left dial**, press the physical **left/right arrows**, or touch the wheel's lower **previous/next** symbols to step through your configured favorites. These controls navigate radio favorites when the active input is NET RADIO. To choose a saved **FM** station, open **Meedia / FM** and tap a receiver preset.
+Select **NET RADIO** under **Sisendid**, then tap a favorite's touchscreen button. Alternatively, turn the **lower-left dial**, press the physical **left/right arrows**, or touch the wheel's lower **previous/next** symbols to step through your configured favorites. These controls navigate radio favorites when the active input is NET RADIO. For saved **FM**, select **TUNER**: the same eight positions become stored presets with frequency labels. **Meedia** (or the L3 press on TUNER) opens the complete FM preset list. The first row's source selection remains available on passive inputs.
 
 ### Change the eight touchscreen favorites
 
@@ -84,9 +86,17 @@ There is currently **no station-configuration picker in Loupedeck** and no built
    ]
    ```
 
-5. Start the service again and reopen the Yamaha workspace. The array order maps to the touchscreen from **left to right**: the first four names form the second row, and the last four form the third row. The same order is used by previous/next navigation.
+5. Start the service again and reopen the Yamaha workspace with **NET RADIO** selected. The array order maps to the touchscreen from **left to right**: the first four names form the second row, and the last four form the third row. The same order is used by previous/next navigation.
 
 The names above are examples, not a required station list. Put other existing bookmark names in the same slots to use your own choices. Stream URLs belong in YCast, **not** in this plugin's `Stations` array. FM presets are read from the receiver rather than from this array.
+
+### Automatic FM names and RDS text
+
+Select **TUNER** and listen to a saved FM station for a few polls. When the receiver reports a tuned FM signal and the same Program Service name remains stable, that name is learned automatically. The preset's main-page caption and Meedia menu entry then use it; the large frequency remains in its icon. Unlearned presets continue to show their frequency. The plugin does **not** visit or retune other stations to discover their names.
+
+Names are stored by normalized **frequency**, not preset number, in `FmStationNames` inside the private `%LOCALAPPDATA%\YamahaDirect\settings.json`. They survive service restarts, and reprogramming a preset to another frequency cannot carry its old name across. Learning ignores first/transient frames after tuning and requires repeated stable observations (normally a few seconds on the visible Yamaha page; longer with background polling). To clear an incorrect learned name, stop the service as described above, back up settings, and remove that frequency's entry; it can be learned again while listening.
+
+The wheel's second text area uses live `Radio_Text_A`, falling back to `Radio_Text_B` when A is blank or only placeholders. This may be a song, show name or other station-supplied information—not an electronic program guide. Empty text clears the old show/song rather than retaining it, and an untuned signal is not presented as live RDS. A temporarily missing PS name can use the remembered name for the same tuned frequency. Text quality and availability depend on the broadcast/reception; missing characters are not invented or looked up online. Program text is never used to rename station buttons.
 
 ## Build from source
 
@@ -115,6 +125,14 @@ Do not run it blindly against another user's profile. To adapt the merge helper,
 ## Recovery and exports
 
 For an already installed plugin, `tools/update_plugin.ps1 -Dotnet <dotnet executable>` updates only the plugin after taking a backup. It does not recreate workspaces or overwrite button assignments, and verifies the CT application-profile files are unchanged. The Loupedeck service restarts briefly; other applications do not need a restart.
+
+To migrate this machine's existing reference layout from fixed favorites to the **1.1.0 contextual buttons**, use:
+
+```powershell
+.\tools\update_plugin.ps1 -ContextSlots -Dotnet <dotnet executable> -Python <python executable>
+```
+
+This opt-in migration backs up the plugin, settings and all CT application profiles, then replaces **only the eight Yamaha main-page press bindings**. It refuses unexpected/customized assignments and verifies that the top row, dials, wheel, Fn actions, other workspaces and other application profiles remain unchanged. Other users should assign the eight contextual actions manually instead. A stale source-view press is revalidated against the receiver and cancelled without sending a control command when the input has changed.
 
 Every installation creates `backups/yamaha-install-<timestamp>/`. The original pre-Yamaha snapshot is also retained in `backups/yamaha-pre-install-20261024-212441/`. These are private and ignored by Git.
 

@@ -1,4 +1,4 @@
-param([string]$Dotnet = 'dotnet')
+param([string]$Dotnet = 'dotnet', [switch]$ContextSlots, [string]$Python = 'python')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $service = Join-Path $env:LOCALAPPDATA 'Logi\LogiPluginService'
@@ -25,6 +25,16 @@ if (Test-Path $settings) { Copy-Item -LiteralPath $settings -Destination (Join-P
 Copy-Item -LiteralPath (Join-Path $service 'LoupedeckSettings.ini') -Destination $backup
 $profileHashes = TreeHashes $apps
 & (Join-Path $PSScriptRoot 'build_package.ps1') -Dotnet $Dotnet
+$migration = $null
+if ($ContextSlots) {
+    & $Python (Join-Path $PSScriptRoot 'migrate_context_slots.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Context migration staging failed; no installed files changed' }
+    $migration = Get-Content (Join-Path $root '.tmp\context-slots\plan.json') -Raw | ConvertFrom-Json
+    $resolved = [IO.Path]::GetFullPath($migration.profile_path)
+    if (-not $resolved.StartsWith($apps+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Migration target is outside CT application profiles' }
+    if ((Get-FileHash -LiteralPath $resolved).Hash -ne $migration.original_sha256) { throw 'Profile changed during staging' }
+}
+$expectedHashes = $profileHashes.Clone()
 $uiRunning = [bool](Get-Process -Name Loupedeck -ErrorAction SilentlyContinue)
 $serviceRunning = [bool](Get-Process -Name LogiPluginService -ErrorAction SilentlyContinue)
 $agentRunning = [bool](Get-Process -Name logioptionsplus_agent -ErrorAction SilentlyContinue)
@@ -39,14 +49,20 @@ try {
     AssertSameProfiles $profileHashes
     $copied = $true
     Copy-Item -Path (Join-Path $root 'dist\YamahaDirect\*') -Destination $plugin -Recurse -Force
+    if ($migration) {
+        Copy-Item -LiteralPath $migration.staged_path -Destination $migration.profile_path -Force
+        $expectedHashes[$migration.profile_path.Substring($apps.Length)] = (Get-FileHash -LiteralPath $migration.staged_path).Hash
+    }
 } catch {
     if ($copied) { Copy-Item -Path (Join-Path $backup 'Plugin\*') -Destination $plugin -Recurse -Force }
+    if ($copied -and $migration) { Copy-Item -LiteralPath (Join-Path $backup ('Applications'+$migration.profile_path.Substring($apps.Length))) -Destination $migration.profile_path -Force }
     throw
 } finally {
     if ($agentRunning) { Start-Process -FilePath 'C:\Program Files\LogiOptionsPlus\logioptionsplus_agent.exe' -WindowStyle Hidden; Start-Sleep -Seconds 2 }
     if ($serviceRunning -and -not (Get-Process -Name LogiPluginService -ErrorAction SilentlyContinue)) { Start-Process -FilePath 'C:\Program Files\Logi\LogiPluginService\LogiPluginService.exe' -WindowStyle Hidden }
     if ($uiRunning) { Start-Sleep -Seconds 3; Start-Process -FilePath 'C:\Program Files (x86)\Loupedeck\Loupedeck2\configui2\Loupedeck.exe' -WindowStyle Hidden }
 }
-AssertSameProfiles $profileHashes
-Write-Output 'Updated YamahaDirect only; all CT application/profile files are unchanged'
+AssertSameProfiles $expectedHashes
+if ($migration) { Write-Output 'Updated YamahaDirect and exactly eight Yamaha press bindings; all other CT application/profile files are unchanged' }
+else { Write-Output 'Updated YamahaDirect only; all CT application/profile files are unchanged' }
 Write-Output "Backup: $backup"

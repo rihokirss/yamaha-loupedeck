@@ -12,12 +12,14 @@ public record ReceiverSettings
     public string[] Stations { get; set; } = ["Sky Plus", "Raadio 2", "Raadio Kuku", "Vikerraadio", "Power Hit Radio", "Raadio Elmar", "NRJ", "Star FM"];
     public int MaxVolume { get; set; } = 100;
     public string LastStation { get; set; } = "";
+    // Copy-on-write: persistence can serialize a stable snapshot while polling learns a name.
+    public Dictionary<string, string> FmStationNames { get; set; } = [];
 }
 
 public record ReceiverState(bool Available = false, bool Power = false, int Volume = 0,
     bool Muted = false, string Input = "", string Playback = "Stop", string Title = "",
     string Station = "", string Shuffle = "Off", string Repeat = "Off", int Preset = 0,
-    string Error = "Connecting…");
+    string Error = "Connecting…", string Frequency = "");
 public record InputItem(string Id, string Name, string Tag);
 public record PresetItem(int Id, string Name);
 public record ListItem(int Index, string Name, string Kind);

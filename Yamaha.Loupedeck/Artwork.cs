@@ -28,6 +28,11 @@ internal static class Artwork
     internal static BitmapImage Glyph(string icon, string color = White) => BitmapImage.FromSvg($"<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><rect width='180' height='180' fill='black'/><g transform='translate(24 24) scale(5.5)' fill='none' stroke='{color}' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>{Shape(icon)}</g></svg>");
     internal static BitmapImage GlowGlyph(string icon, string color, bool active = false) => MakeGlow(icon, color, active, color);
     internal static BitmapImage StationGlyph(bool active, bool available = true) => MakeGlow("radio", available ? White : Gray, active, Amber);
+    internal static BitmapImage Blank() => BitmapImage.FromSvg("<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><rect width='180' height='180' fill='black'/></svg>");
+    internal static BitmapImage PresetGlyph(string frequency, bool active)
+    {
+        return BitmapImage.FromSvg($"<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><defs><radialGradient id='fm'><stop stop-color='{Amber}' stop-opacity='{(active ? ".24" : "0")}'/><stop offset='1' stop-color='{Amber}' stop-opacity='0'/></radialGradient></defs><rect width='180' height='180' fill='black'/><circle cx='90' cy='90' r='88' fill='url(#fm)'/><g transform='translate(60 8) scale(2.5)' fill='none' stroke='{White}' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>{Shape("radio")}</g><g text-anchor='middle' font-family='Segoe UI' fill='{White}'><text x='90' y='126' font-size='{(frequency.Length > 6 ? 30 : 38)}' font-weight='650'>{Escape(frequency)}</text><text x='90' y='154' font-size='18'>FM</text></g>{(active ? $"<circle cx='90' cy='171' r='4' fill='{Amber}'/>" : "")}</svg>");
+    }
     internal static string PowerLabel(bool available, bool power) => !available ? "ÜHENDUS PUUDUB" : power ? "SEES" : "OOTEL";
     internal static string PowerColor(bool available, bool power) => !available ? Red : power ? Green : "#94A3B8";
     internal static BitmapImage Power(bool available, bool power) => BitmapImage.FromSvg(PowerSvg(available, power));

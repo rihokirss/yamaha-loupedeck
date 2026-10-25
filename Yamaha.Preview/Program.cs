@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Yamaha.Core;
 
 var root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 var service = @"C:\Program Files\Logi\LogiPluginService";
@@ -70,7 +71,7 @@ Console.WriteLine("Wheel template identifier: " + combined);
 var ownerType = plugin.GetType("Loupedeck.YamahaDirectPlugin.YamahaDirectPlugin")!;
 var owner = Activator.CreateInstance(ownerType)!;
 var sdkActions = new List<object>();
-foreach (var name in new[] { "ReceiverCommand", "VolumeAdjustment", "SourceAdjustment", "TrackAdjustment", "InputsFolder", "MediaFolder", "TrackPressFolder" })
+foreach (var name in new[] { "ReceiverCommand", "VolumeAdjustment", "SourceAdjustment", "TrackAdjustment", "InputsFolder", "MediaFolder", "TrackPressFolder", "ContextSlotCommand" })
 {
     var type = plugin.GetType("Loupedeck.YamahaDirectPlugin." + name)!;
     var action = Activator.CreateInstance(type)!;
@@ -91,7 +92,7 @@ foreach (var name in new[] { "ReceiverCommand", "VolumeAdjustment", "SourceAdjus
     }
 }
 var listeners = (Delegate?)ownerType.GetField("Updated", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner);
-if (listeners?.GetInvocationList().Length != 7) throw new Exception("SDK feedback subscriptions missing before Plugin.Load");
+if (listeners?.GetInvocationList().Length != 8) throw new Exception("SDK feedback subscriptions missing before Plugin.Load");
 listeners.DynamicInvoke();
 if (Probe.Values != 3) throw new Exception($"Expected all three dial callbacks; got {Probe.Values}");
 var volumeListener = (Delegate?)ownerType.GetField("VolumeUpdated", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner);
@@ -101,10 +102,47 @@ if (Probe.Values != 4) throw new Exception("Immediate SDK volume notification mi
 var labels = sdkActions[0].GetType().GetMethod("GetCommandDisplayName", BindingFlags.NonPublic | BindingFlags.Instance)!;
 var size = Enum.Parse(api.GetType("Loupedeck.PluginImageSize")!, "Width90Pixels");
 if ((string?)labels.Invoke(sdkActions[0], ["station0", size]) != "Sky Plus") throw new Exception("Friendly station caption missing");
-Console.WriteLine("PASS SDK: 7 feedback subscriptions before plugin load, 3 dial notifications, isolated immediate volume notification, friendly station caption");
+Console.WriteLine("PASS SDK: 8 feedback subscriptions before plugin load, 3 dial notifications, isolated immediate volume notification, friendly station caption");
+
+// Use real SDK action getters with a non-network receiver; never send LAN control commands.
+using var contextReceiver = new Receiver(new(), new NoNetworkTransport());
+ownerType.GetProperty("Receiver", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(owner, contextReceiver);
+ownerType.GetProperty("Current", BindingFlags.Public | BindingFlags.Static)!.SetValue(null, owner);
+typeof(Receiver).GetProperty("Presets")!.SetValue(contextReceiver, new PresetItem[] { new(1, "1 : FM 95.40 MHz"), new(4, "4 : FM 101.60 MHz") });
+var context = sdkActions[^1];
+var contextOutput = Path.Combine(root, ".tmp/context-previews"); Directory.CreateDirectory(contextOutput);
+var labelMethod = context.GetType().GetMethod("GetCommandDisplayName", BindingFlags.NonPublic | BindingFlags.Instance)!;
+var imageMethod = context.GetType().GetMethod("GetCommandImage", BindingFlags.NonPublic | BindingFlags.Instance)!;
+foreach (var (input, expected) in new[] { ("NET RADIO", "Sky Plus"), ("TUNER", "FM 95.40 MHz"), ("SERVER", "Eelmine"), ("Spotify", "Eelmine"), ("AirPlay", "Eelmine"), ("OPTICAL", " ") })
+{
+    typeof(Receiver).GetProperty("State")!.SetValue(contextReceiver, new ReceiverState(Available: true, Power: true, Input: input, Playback: "Play", Preset: 4, Station: "Raadio Kuku"));
+    if ((string?)labelMethod.Invoke(context, ["slot0", size]) != expected) throw new Exception("SDK contextual label mismatch: " + input);
+    for (var n = 0; n < 8; n++)
+        SaveRaster(imageMethod.Invoke(context, ["slot" + n, size])!, Path.Combine(contextOutput, "context-" + input.Replace(' ', '-').ToLowerInvariant() + "-" + (n + 1) + ".png"));
+    var media = sdkActions[5];
+    if ((string?)media.GetType().GetMethod("GetButtonDisplayName")!.Invoke(media, [size]) != "Meedia") throw new Exception("Media parent name mismatch");
+}
+contextReceiver.Settings.FmStationNames = new() { ["95.4"] = "SKYPLUS" };
+typeof(Receiver).GetProperty("State")!.SetValue(contextReceiver, new ReceiverState(Available: true, Power: true, Input: "TUNER", Preset: 1, Frequency: "95.4", Station: "SKYPLUS", Title: "TEDDY SWIMS - Mr. Know It All"));
+if ((string?)labelMethod.Invoke(context, ["slot0", size]) != "SKYPLUS") throw new Exception("Learned RDS name missing from SDK preset caption");
+if ((string?)sdkActions[5].GetType().GetMethod("GetCommandDisplayName")!.Invoke(sdkActions[5], [Uri.EscapeDataString("TUNER") + "|preset:1", size]) != "SKYPLUS") throw new Exception("Learned RDS name missing from FM menu");
+SaveRaster(imageMethod.Invoke(context, ["slot0", size])!, Path.Combine(contextOutput, "rds-fm-frequency.png"));
+var rdsSvg = (string)art.GetMethod("WheelSvg", flags)!.Invoke(null, [true, true, false, 35, "TUNER", "SKYPLUS", "TEDDY SWIMS - Mr. Know It All", "", ""])!;
+var rdsVisibleText = string.Join(" ", System.Xml.Linq.XElement.Parse(rdsSvg).Descendants().Where(e => e.Name.LocalName == "text").Select(e => e.Value));
+if (!rdsSvg.Contains(">SKYPLUS<") || !rdsVisibleText.Contains("TEDDY SWIMS - Mr. Know It All")) throw new Exception("RDS station/program missing from wheel");
+SaveRaster(art.GetMethod("Wheel", flags)!.Invoke(null, [true, true, false, 35, "TUNER", "SKYPLUS", "TEDDY SWIMS - Mr. Know It All", "", ""])!, Path.Combine(contextOutput, "rds-wheel.png"), 240);
+Console.WriteLine("PASS SDK RDS: learned name in button and menu captions, frequency retained in icon, station and program text on full wheel");
+ownerType.GetProperty("Current", BindingFlags.Public | BindingFlags.Static)!.SetValue(null, null);
+Console.WriteLine("PASS SDK context: source-dependent live labels, all eight images on six inputs, consistent Meedia parent label; no network requests");
 
 public static class Probe
 {
     public static int Values;
     public static void OnBridge() => Values++;
+}
+
+public sealed class NoNetworkTransport : IYamahaTransport
+{
+    public Task<System.Xml.Linq.XElement> RequestAsync(string host, System.Xml.Linq.XElement request, CancellationToken ct) => throw new Exception("Preview must not access a receiver");
+    public void Dispose() { }
 }

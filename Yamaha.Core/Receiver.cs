@@ -8,6 +8,8 @@ public sealed class Receiver : IDisposable
     private readonly IYamahaTransport _transport;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationToken _ct;
+    private readonly TimeProvider _time;
+    private readonly RdsStationLearner _rds = new();
     private DateTime _poweredAt;
     private bool _verified;
     private string? _lastStation;
@@ -18,8 +20,9 @@ public sealed class Receiver : IDisposable
     public PresetItem[] Presets { get; private set; } = [];
     public event Action? Changed;
     public event Action? AddressChanged;
-    public Receiver(ReceiverSettings settings, IYamahaTransport transport, CancellationToken ct = default)
-    { Settings = settings; _transport = transport; _ct = ct; _lastStation = settings.Stations.Contains(settings.LastStation) ? settings.LastStation : null; }
+    public event Action? SettingsChanged;
+    public Receiver(ReceiverSettings settings, IYamahaTransport transport, CancellationToken ct = default, TimeProvider? timeProvider = null)
+    { Settings = settings; _transport = transport; _ct = ct; _time = timeProvider ?? TimeProvider.System; _lastStation = settings.Stations.Contains(settings.LastStation) ? settings.LastStation : null; }
 
     private static XElement Path(string[] path, object value)
     {
@@ -57,7 +60,7 @@ public sealed class Receiver : IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException || !_ct.IsCancellationRequested)
         {
             var offline = ex is HttpRequestException or OperationCanceledException or System.Net.Sockets.SocketException or System.Xml.XmlException;
-            if (offline) _verified = false;
+            if (offline) { _verified = false; _rds.Reset(); }
             Publish(State with { Available = offline ? false : State.Available, Error = ex.Message });
             throw;
         }
@@ -103,7 +106,9 @@ public sealed class Receiver : IDisposable
         var xml = await Get("Main_Zone", "Basic_Status");
         var basic = xml.Element("Main_Zone")?.Element("Basic_Status") ?? throw new ReceiverException("Basic_Status missing");
         var input = basic.Value("Input", "Input_Sel");
-        var state = State with { Available = true, Power = basic.Value("Power_Control", "Power") == "On", Volume = basic.Number("Volume", "Lvl", "Val"), Muted = basic.Value("Volume", "Mute") == "On", Input = input, Error = "" };
+        if (input == "TUNER" && State.Input != "TUNER") await ReadPresets();
+        var state = State with { Available = true, Power = basic.Value("Power_Control", "Power") == "On", Volume = basic.Number("Volume", "Lvl", "Val"), Muted = basic.Value("Volume", "Mute") == "On", Input = input, Error = "", Frequency = "" };
+        if (!state.Power || input != "TUNER") _rds.Reset();
         if (state.Power && Tag(input) is { Length: > 0 } tag)
         {
             var info = (await Get(tag, "Play_Info")).Element(tag)?.Element("Play_Info");
@@ -113,7 +118,16 @@ public sealed class Receiver : IDisposable
                 if (title.Length == 0) title = info.Value("Meta_Info", "Track");
                 var artist = info.Value("Meta_Info", "Artist");
                 var station = info.Value("Meta_Info", "Station");
-                if (tag == "Tuner") { station = info.Value("Meta_Info", "Program_Service"); title = info.Value("Meta_Info", "Radio_Text_A"); }
+                if (tag == "Tuner")
+                {
+                    var rds = Rds.Read(info);
+                    if (_rds.Observe(rds, Settings, _time.GetUtcNow())) SettingsChanged?.Invoke();
+                    station = rds.Station;
+                    if (station.Length == 0 && rds.Tuned) station = Settings.FmStationNames?.GetValueOrDefault(rds.Frequency) ?? "";
+                    if (station.Length == 0 && rds.Frequency.Length > 0) station = "FM " + rds.Frequency + " MHz";
+                    title = rds.Text; artist = "";
+                    state = state with { Frequency = rds.Frequency };
+                }
                 state = state with { Playback = info.Value("Playback_Info"), Title = XmlValue.Clean(artist.Length > 0 ? artist + " – " + title : title), Station = XmlValue.Clean(station), Preset = info.Number("Preset", "Preset_Sel"), Shuffle = info.Value("Play_Mode", "Shuffle"), Repeat = info.Value("Play_Mode", "Repeat") };
                 if (input == "NET RADIO" && station.Length > 0 && Settings.Stations.Contains(station)) { _lastStation = station; Settings.LastStation = station; }
                 if (input == "SERVER" && title.Length > 0)
@@ -122,6 +136,7 @@ public sealed class Receiver : IDisposable
                     _lastServerTrack = (list.Name, XmlValue.Clean(title));
                 }
             }
+            else { _rds.Reset(); state = state with { Playback = "Stop", Title = "", Station = "" }; }
         }
         else state = state with { Playback = "Stop", Title = "", Station = "" };
         Publish(state);
@@ -279,7 +294,8 @@ public sealed class Receiver : IDisposable
         do { await Task.Delay(150, _ct); await RefreshInternal(); if (State.Preset == id) return; } while (DateTime.UtcNow < until);
         throw new ReceiverException("Tuner preset was not confirmed");
     }
-    public Task StepAsync(int diff) => Run(async () =>
+    public Task StepAsync(int diff) => Run(async () => { await RefreshInternal(); await Step(diff); });
+    private async Task Step(int diff)
     {
         RequirePower();
         if (diff == 0) return;
@@ -297,8 +313,9 @@ public sealed class Receiver : IDisposable
         else if (State.Input is "SERVER" or "Spotify" or "AirPlay")
         { await Put([Tag(State.Input), "Play_Control", "Playback"], diff > 0 ? "Skip Fwd" : "Skip Rev"); await Task.Delay(200, _ct); await RefreshInternal(); }
         else throw new ReceiverException("This input has no track controls");
-    });
-    public Task PlaybackAsync(string action = "toggle") => Run(async () =>
+    }
+    public Task PlaybackAsync(string action = "toggle") => Run(async () => { await RefreshInternal(); await Playback(action); });
+    private async Task Playback(string action)
     {
         RequirePower();
         var expected = "Stop";
@@ -325,10 +342,32 @@ public sealed class Receiver : IDisposable
         var until = DateTime.UtcNow.AddSeconds(2);
         do { await Task.Delay(150, _ct); await RefreshInternal(); if (State.Playback == expected) return; } while (DateTime.UtcNow < until);
         throw new ReceiverException($"Playback state not confirmed: {expected}");
+    }
+    public Task ToggleShuffleAsync() => Run(ToggleShuffle);
+    private async Task ToggleShuffle()
+    { RequirePower(); if (State.Input != "SERVER") throw new ReceiverException("Shuffle requires SERVER"); await Put(["SERVER", "Play_Control", "Play_Mode", "Shuffle"], State.Shuffle == "On" ? "Off" : "On"); await RefreshInternal(); }
+    public Task CycleRepeatAsync() => Run(CycleRepeat);
+    private async Task CycleRepeat()
+    { RequirePower(); if (State.Input != "SERVER") throw new ReceiverException("Repeat requires SERVER"); await Put(["SERVER", "Play_Control", "Play_Mode", "Repeat"], State.Repeat switch { "Off" => "One", "One" => "All", _ => "Off" }); await RefreshInternal(); }
+
+    public Task ExecuteContextAsync(SourceAction action) => Run(async () =>
+    {
+        // Re-read under the same gate as execution. A stale view must never switch inputs.
+        await RefreshInternal();
+        if (!SourceControls.IsCurrent(action, State, Settings, Presets))
+            throw new ReceiverException("Input or controls changed; command cancelled");
+        if (action.Id.StartsWith("station:")) await PlayStation(action.Id[8..]);
+        else if (action.Id.StartsWith("preset:") && int.TryParse(action.Id[7..], out var id)) await SelectPreset(id);
+        else switch (action.Id)
+        {
+            case "previous": await Step(-1); break;
+            case "next": await Step(1); break;
+            case "play": await Playback("toggle"); break;
+            case "stop": await Playback("stop"); break;
+            case "shuffle": await ToggleShuffle(); break;
+            case "repeat": await CycleRepeat(); break;
+            default: throw new ReceiverException("Unknown context action");
+        }
     });
-    public Task ToggleShuffleAsync() => Run(async () =>
-    { RequirePower(); if (State.Input != "SERVER") throw new ReceiverException("Shuffle requires SERVER"); await Put(["SERVER", "Play_Control", "Play_Mode", "Shuffle"], State.Shuffle == "On" ? "Off" : "On"); await RefreshInternal(); });
-    public Task CycleRepeatAsync() => Run(async () =>
-    { RequirePower(); if (State.Input != "SERVER") throw new ReceiverException("Repeat requires SERVER"); await Put(["SERVER", "Play_Control", "Play_Mode", "Repeat"], State.Repeat switch { "Off" => "One", "One" => "All", _ => "Off" }); await RefreshInternal(); });
     public void Dispose() => _transport.Dispose();
 }

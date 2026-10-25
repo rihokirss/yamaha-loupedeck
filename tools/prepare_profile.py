@@ -21,6 +21,8 @@ def command(name): return "$YamahaDirect___Loupedeck.YamahaDirectPlugin.Receiver
 def folder(name): return "$YamahaDirect___#DynamicFolder___DynamicFolder#Loupedeck.YamahaDirectPlugin." + name
 def adjustment(name): return "$YamahaDirect___Loupedeck.YamahaDirectPlugin." + name
 
+def context_slot(index): return "$YamahaDirect___Loupedeck.YamahaDirectPlugin.ContextSlotCommand___slot" + str(index)
+
 ARROWS = {
     7: ("left", "$@Generic___@ProfileAction___F726ED144C7A4913864651E8B705E7F1"),
     10: ("right", "$@Generic___@ProfileAction___A2119887B34D44679C0B89DC06BAC9AA"),
@@ -49,9 +51,9 @@ def build():
         control["pressAction"] = arrow(direction)
     for field, name in [("touchPages", "touch"), ("encoderPages", "encoders"), ("wheelPages", "wheel"), ("workspaces", "workspace")]:
         mode[field] = [p for p in mode[field] if p["name"] != ident(name)]
-    page = typed("ProfileLayoutButtonPage", name=ident("touch"), displayName="Yamaha", description="Receiver and radio favorites",
+    page = typed("ProfileLayoutButtonPage", name=ident("touch"), displayName="Yamaha", description="Receiver and active-input controls",
         controls=[button(command("power")), button(command("mute")), button(folder("InputsFolder")), button(folder("MediaFolder"))] +
-                 [button(command(f"station{i}")) for i in range(8)],
+                 [button(context_slot(i)) for i in range(8)],
         dynamicPageName=None, dynamicPagePluginName=None, dynamicPageNumber=0)
     mode["touchPages"].append(page)
     old_encoders = mode["encoderPages"][0]["controls"]

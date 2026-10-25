@@ -17,6 +17,7 @@ public sealed class YamahaDirectPlugin : Plugin
     private DateTime _visibleUntil;
     private readonly string _settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "YamahaDirect", "settings.json");
     private Task? _pollTask;
+    private readonly object _settingsSync = new();
     private int _sourceIndex = -1;
     private DateTime _sourceExpires;
     public override void Load()
@@ -33,6 +34,7 @@ public sealed class YamahaDirectPlugin : Plugin
         Receiver = new Receiver(settings, new HttpYamahaTransport(), _stop.Token);
         Receiver.Changed += () => { if (!Receiver.State.Available) Volume?.Discard(); Updated?.Invoke(); };
         Receiver.AddressChanged += SaveSettings;
+        Receiver.SettingsChanged += SaveSettings;
         Volume = new VolumePump(Receiver);
         Volume.Changed += () => VolumeUpdated?.Invoke();
         Volume.Failed += ex => Error(ex);
@@ -40,8 +42,13 @@ public sealed class YamahaDirectPlugin : Plugin
     }
     private void SaveSettings()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(Receiver.Settings, new JsonSerializerOptions { WriteIndented = true }));
+        lock (_settingsSync)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            var temporary = _settingsPath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(Receiver.Settings, new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temporary, _settingsPath, true);
+        }
     }
     private async Task Poll()
     {

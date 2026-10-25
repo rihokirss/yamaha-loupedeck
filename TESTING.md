@@ -1,5 +1,33 @@
 # Verification record · 2026-10-24
 
+## FM RDS learning update · 2026-10-25 (1.2.0)
+
+- TUNER metadata now uses normalized `Program_Service` and `Radio_Text_A`, with `Radio_Text_B` fallback when A is empty/placeholder-only. The full wheel receives the station name and live show/song text. Empty text clears the old program; untuned/unready signals do not expose old RDS metadata as live.
+- FM button and Meedia captions learn stable PS names by canonical frequency, not preset ID. First frames/transient names are ignored; learning requires repeated observations, at least 3 seconds on the frequency and 2 seconds with the same name. It never sends a tuning/scan command. Frequencies remain in the icons and are used as labels until learned. Cached names are serialized in the existing private settings; settings writes now use a locked temporary-file replacement.
+- Core suite passed **58/58**, covering A/B fallback, padding/accents, absent/untuned/AM metadata, frequency normalization, settle timing, stale PS after tuning, empty-data retention rules, copy-on-write cache snapshots, JSON persistence round-trip, preset reassignment, main/menu labels, learning notifications and no-PUT polling. Earlier context, menu-race and volume tests also passed.
+- Release plugin build: zero warnings/errors. Real SDK preview checks learned names in main and menu captions, frequency icon retention, and complete visible station/program text across wrapped wheel lines. The generated 240px FM wheel was visually inspected.
+- Fresh pre-update backup: `backups/yamaha-plugin-update-20261025-125725/`. Installed service reports **1.2.0 / Normal / Plugin successfully loaded**. DLL hashes match the tested build. **All 131 CT application/profile files remain byte-identical**; pre-existing private receiver settings are unchanged apart from the added learned-name cache.
+- Real receiver, without retuning: current FM 95.4 MHz reported `SKYPLUS` and B-field text. The running plugin learned and persisted `95.4 → SKYPLUS`; the native icon response now labels the first FM button `SKYPLUS`. The native rendered wheel was visually checked and shows `SKYPLUS` plus the current `SKY PLUS - #1 Mu` broadcast text. Reception text can be partial/garbled at its source; no missing words are invented.
+- No real receiver power, volume, mute, input or preset commands were sent by these checks. Other presets will acquire their names as the user listens. Physical reception-loss/re-tune transitions, other stations and a separate service-restart persistence rehearsal remain manual; the corresponding logic and serialization are simulated. A fresh private recovery LP4 and plugin package were ZIP-validated. No GitHub release was created by the installation.
+
+## Contextual main-page update · 2026-10-25 (1.1.0)
+
+- The lower eight touchscreen positions now follow the confirmed receiver input, not the L2 preview. NET RADIO uses configured favorites; TUNER uses actual stored preset IDs/frequencies; SERVER has six controls; Spotify/AirPlay have four. Passive sources, disconnected state and unused positions are black and inactive. Media folders expose only the current source's actions; FM presets appear only on TUNER.
+- The core simulation suite passed **38/38** on this run, including stale-view cancellation after an external input change (no PUT requests), valid context station/preset selection, SERVER shuffle/repeat feedback, normalized FM frequencies, nonconsecutive preset IDs, standby behavior, and all earlier volume/menu safety tests.
+- Release plugin build: **zero warnings, zero errors**. The SDK preview checks eight pre-load subscriptions, the existing immediate/dial feedback, and live caption/image getters on NET RADIO, TUNER, SERVER, Spotify, AirPlay and OPTICAL. FM frequency and SERVER control previews were visually inspected. Context previews are regenerated under `.tmp/context-previews/`, not published as personal device screenshots.
+- Fresh backup: `backups/yamaha-plugin-update-20261025-104058/`. The opt-in migration changed exactly eight Yamaha main-page press bindings. A post-restart audit confirmed all other System profile content is semantically identical, **130 other CT application-profile files are byte-identical**, and both installed DLL hashes match the tested build. This comparison includes the current other-application profiles rather than an obsolete original-install snapshot.
+- The installed service reports **1.1.0 / Normal / Plugin successfully loaded**; all eight contextual commands are registered. All eight live default icon responses contain the expected NET RADIO station captions in configured order (including `Raadio 2`), rather than the palette placeholders `Sisendinupp 1–8`.
+- Receiver identity, current NET RADIO state and actual eight FM presets were read successfully. **No power, input, playback, mute or volume changes were sent to the real receiver during this update**, preserving current radio playback. Other-source transitions and physical button presses therefore remain manual checks. Real active Spotify/AirPlay/SERVER playback is not claimed as tested.
+- Updated private recovery profile and portable plugin archives were generated and ZIP-validated. No GitHub release was created by the installation.
+
+Read-only audit for this migration:
+
+```powershell
+python .\tools\verify_context_slots.py --baseline .\backups\yamaha-plugin-update-20261025-104058
+```
+
+Manual acceptance: select TUNER in **Sisendid** and check frequency labels/highlight, select SERVER or Spotify/AirPlay with active playback and check their controls, then select OPTICAL to confirm the eight slots are blank and Meedia does not open. Change the input via HA/remote too; allow the normal 2s visible/10s background poll. Merely turning L2 without applying it must not change the main-page content.
+
 ## Power-feedback update · 2026-10-25 (1.0.2)
 
 - Power tile and wheel now explicitly distinguish green `SEES`, gray `OOTEL`, and red `ÜHENDUS PUUDUB`.

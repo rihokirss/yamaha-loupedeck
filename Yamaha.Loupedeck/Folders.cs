@@ -1,3 +1,4 @@
+using Yamaha.Core;
 using YamahaPlugin = Loupedeck.YamahaDirectPlugin.YamahaDirectPlugin;
 namespace Loupedeck.YamahaDirectPlugin;
 
@@ -30,51 +31,42 @@ public sealed class InputsFolder : PluginDynamicFolder
 public class MediaFolder : PluginDynamicFolder
 {
     private string _list = "", _selection = "";
-    public MediaFolder() { DisplayName = "Yamaha Media / FM"; GroupName = "Yamaha"; }
+    public MediaFolder() { DisplayName = "Yamaha Meedia · aktiivne sisend"; GroupName = "Yamaha"; }
     public override bool Load() { ((YamahaPlugin)Plugin).Updated += Changed; return true; }
     public override bool Unload() { ((YamahaPlugin)Plugin).Updated -= Changed; return true; }
     private void Changed()
     {
         var r = YamahaPlugin.Current?.Receiver; if (r == null) return;
-        var ids = Ids().ToArray();
-        var list = string.Join("|", ids) + string.Join("|", r.Presets.Select(i => i.Name));
+        var items = Items();
+        var list = string.Join("|", items.Select(a => a.Token + ":" + a.Label));
         if (_list != list) { _list = list; ButtonActionNamesChanged(); }
         var s = r.State; var selection = $"{s.Available}|{s.Input}|{s.Preset}|{s.Playback}|{s.Shuffle}|{s.Repeat}";
         if (_selection == selection) return;
-        _selection = selection; foreach (var id in ids) CommandImageChanged(id);
+        _selection = selection; foreach (var item in items) CommandImageChanged(item.Token);
     }
-    private static IEnumerable<string> Ids()
-    {
-        var p = YamahaPlugin.Current; if (p?.Receiver == null) yield break;
-        if (p.Receiver.State.Input is "SERVER" or "Spotify" or "AirPlay" or "NET RADIO")
-        { yield return "previous"; yield return "play"; yield return "next"; yield return "stop"; }
-        if (p.Receiver.State.Input == "SERVER") { yield return "shuffle"; yield return "repeat"; }
-        foreach (var preset in p.Receiver.Presets) yield return "preset:" + preset.Id;
-    }
-    public override string GetButtonDisplayName(PluginImageSize size) => "Meedia / FM";
-    public override BitmapImage GetButtonImage(PluginImageSize size) => Artwork.GlowGlyph("sliders-horizontal", Artwork.Rose);
-    public override IEnumerable<string> GetButtonPressActionNames(DeviceType device) => Ids().Select(CreateCommandName);
-    public override string GetCommandDisplayName(string id, PluginImageSize size)
+    private static SourceAction[] Items()
     {
         var r = YamahaPlugin.Current?.Receiver;
-        if (id.StartsWith("preset:") && int.TryParse(id[7..], out var n)) return r?.Presets.FirstOrDefault(p => p.Id == n)?.Name ?? "FM " + n;
-        return id switch { "previous" => "Eelmine", "next" => "Järgmine", "play" => r?.State.Playback == "Play" ? "Peata / paus" : "Esita", "stop" => "Peata", "shuffle" => "Juhuesitus " + r?.State.Shuffle, "repeat" => "Kordus " + r?.State.Repeat, _ => id };
+        return r == null ? [] : SourceControls.Menu(r.State, r.Settings, r.Presets);
+    }
+    public override bool Activate() { YamahaPlugin.Current?.Touch(); return Items().Length > 0; }
+    public override string GetButtonDisplayName(PluginImageSize size) => "Meedia";
+    public override BitmapImage GetButtonImage(PluginImageSize size) => Artwork.GlowGlyph("sliders-horizontal", Artwork.Rose);
+    public override IEnumerable<string> GetButtonPressActionNames(DeviceType device) => Items().Select(a => CreateCommandName(a.Token));
+    public override string GetCommandDisplayName(string id, PluginImageSize size)
+    {
+        return Items().FirstOrDefault(a => a.Token == id)?.Label ?? " ";
     }
     public override BitmapImage GetCommandImage(string id, PluginImageSize size)
     {
-        var p = YamahaPlugin.Current; p?.Touch(); var s = p?.Receiver.State;
-        if (id.StartsWith("preset:") && int.TryParse(id[7..], out var n))
-        { return Artwork.StationGlyph(s?.Input == "TUNER" && s.Preset == n, s?.Available == true); }
-        var icon = id switch { "previous" => "skip-back", "next" => "skip-forward", "play" => s?.Playback == "Play" ? "pause" : "play", "stop" => "square", "shuffle" => "shuffle", "repeat" => "repeat", _ => "radio" };
-        var label = id switch { "play" => s?.Input == "NET RADIO" && s.Playback == "Play" ? "Stop Radio" : s?.Playback == "Play" ? "Pause" : "Play", "shuffle" => "Shuffle " + s?.Shuffle, "repeat" => "Repeat " + s?.Repeat, _ => id };
-        // NET RADIO previous/next are our favorite navigator, not unsupported Playback Skip.
-        return Artwork.GlowGlyph(icon, s?.Available == true ? Artwork.Violet : Artwork.Gray, id == "play" && s?.Playback == "Play");
+        YamahaPlugin.Current?.Touch();
+        return ContextPresentation.Image(Items().FirstOrDefault(a => a.Token == id));
     }
     public override void RunCommand(string id)
     {
         if (YamahaPlugin.Current is not { } p) return;
-        if (id.StartsWith("preset:") && int.TryParse(id[7..], out var n)) p.Execute(() => p.Receiver.SelectPresetAsync(n));
-        else p.Execute(() => ReceiverCommand.Execute(p.Receiver, id));
+        var action = Items().FirstOrDefault(a => a.Token == id);
+        if (action?.Enabled == true) p.Execute(() => p.Receiver.ExecuteContextAsync(action));
     }
 }
 
@@ -83,8 +75,10 @@ public sealed class TrackPressFolder : MediaFolder
     public TrackPressFolder() { DisplayName = "Yamaha Track Press"; }
     public override bool Activate()
     {
-        if (YamahaPlugin.Current is { } p && p.Receiver.State.Input != "TUNER")
-        { p.Execute(() => p.Receiver.PlaybackAsync()); return false; }
-        return true;
+        if (YamahaPlugin.Current is not { } p) return false;
+        if (p.Receiver.State.Input == "TUNER") return base.Activate();
+        var action = SourceControls.Menu(p.Receiver.State, p.Receiver.Settings, p.Receiver.Presets).FirstOrDefault(a => a.Id == "play");
+        if (action?.Enabled == true) p.Execute(() => p.Receiver.ExecuteContextAsync(action));
+        return false;
     }
 }
