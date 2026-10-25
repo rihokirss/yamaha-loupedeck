@@ -1,5 +1,12 @@
 # Verification record · 2026-10-24
 
+## Adjacent radio inputs · 2026-10-25 (1.2.1)
+
+- The shared input list now starts with NET RADIO and TUNER (FM), followed by all other inputs in their original receiver order. Both the Sisendid folder and L2 preview/apply use that same list. Input IDs/API tags are unchanged. One forward step from NET RADIO previews FM; one backward step from FM previews NET RADIO. The existing press-to-apply behavior is retained.
+- Core suite passed **60/60** with the fake receiver's list deliberately matching the real nonadjacent radio order. Tests assert radio adjacency, stable remaining order, preserved API identities and no input-selection PUT while sorting. The real SDK preview also exercises one-step forward/reverse radio preview without retuning. Release build: zero warnings/errors.
+- A read-only query of the actual receiver confirmed all 11 inputs remain available in this order: NET RADIO, TUNER, Spotify, SERVER, AirPlay, CD, OPTICAL, COAXIAL, LINE1, LINE2, LINE3. No real input, volume or playback command was sent for verification.
+- Pre-update backup: `backups/yamaha-plugin-update-20261025-135603/`. Plugin-only installation preserved CT application/profile files and the private settings/RDS cache; recovery profile and plugin archives were regenerated and ZIP-validated. Physical dial feel and input apply remain a manual check.
+
 ## FM RDS learning update · 2026-10-25 (1.2.0)
 
 - TUNER metadata now uses normalized `Program_Service` and `Radio_Text_A`, with `Radio_Text_B` fallback when A is empty/placeholder-only. The full wheel receives the station name and live show/song text. Empty text clears the old program; untuned/unready signals do not expose old RDS metadata as live.

@@ -44,6 +44,8 @@ The original fixed **station** actions are still available for users who intenti
 
 NET RADIO: previous/next wrap the eight configured favorites. TUNER: navigate actual stored preset IDs. SERVER/Spotify/AirPlay: use supported track transport. Passive inputs such as LINE/OPTICAL do not have media transport.
 
+The **Sisendid** list and L2 preview both start with **NET RADIO, TUNER (FM)**, followed by all other sources in their original receiver order. From NET RADIO, turn L2 one step forward for FM; from FM, one step backward for NET RADIO. Press L2 to apply the preview; turning alone still does not change the playing input.
+
 ## Visual language
 
 Black background, unboxed Lucide geometry. Power is green, mute/volume amber, inputs violet, media/track rose. Radio and FM preset icons are white; an active station has an amber glow and dot. The wheel uses warm cream main text, muted lavender secondary text, an amber/coral volume arc, and a violet arc while muted. The number remains beside L1 rather than duplicating it in the wheel center.

@@ -132,6 +132,21 @@ var rdsVisibleText = string.Join(" ", System.Xml.Linq.XElement.Parse(rdsSvg).Des
 if (!rdsSvg.Contains(">SKYPLUS<") || !rdsVisibleText.Contains("TEDDY SWIMS - Mr. Know It All")) throw new Exception("RDS station/program missing from wheel");
 SaveRaster(art.GetMethod("Wheel", flags)!.Invoke(null, [true, true, false, 35, "TUNER", "SKYPLUS", "TEDDY SWIMS - Mr. Know It All", "", ""])!, Path.Combine(contextOutput, "rds-wheel.png"), 240);
 Console.WriteLine("PASS SDK RDS: learned name in button and menu captions, frequency retained in icon, station and program text on full wheel");
+typeof(Receiver).GetProperty("Inputs")!.SetValue(contextReceiver, new InputItem[] { new("NET RADIO", "NET RADIO", "NET_RADIO"), new("TUNER", "TUNER", "Tuner"), new("Spotify", "Spotify", "Spotify") });
+typeof(Receiver).GetProperty("State")!.SetValue(contextReceiver, new ReceiverState(Available: true, Power: true, Input: "NET RADIO"));
+var feedbackField = ownerType.GetField("Updated", BindingFlags.Instance | BindingFlags.NonPublic)!;
+var savedFeedback = feedbackField.GetValue(owner); feedbackField.SetValue(owner, null);
+try
+{
+    var browse = ownerType.GetMethod("BrowseSource", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    var preview = ownerType.GetProperty("SourcePreview", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    browse.Invoke(owner, [1]);
+    if ((string?)preview.GetValue(owner) != "→FM") throw new Exception("One input step did not preview FM from NET RADIO");
+    browse.Invoke(owner, [-1]);
+    if ((string?)preview.GetValue(owner) != "→Radio" || contextReceiver.State.Input != "NET RADIO") throw new Exception("Reverse radio preview changed the receiver input");
+}
+finally { feedbackField.SetValue(owner, savedFeedback); }
+Console.WriteLine("PASS SDK input dial: one forward step NET RADIO to FM, one backward step returns; preview never retunes");
 ownerType.GetProperty("Current", BindingFlags.Public | BindingFlags.Static)!.SetValue(null, null);
 Console.WriteLine("PASS SDK context: source-dependent live labels, all eight images on six inputs, consistent Meedia parent label; no network requests");
 

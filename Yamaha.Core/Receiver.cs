@@ -77,7 +77,9 @@ public sealed class Receiver : IDisposable
             _verified = true;
             var inputXml = await Get("Main_Zone", "Input", "Input_Sel_Item");
             Inputs = inputXml.Element("Main_Zone")?.Element("Input")?.Element("Input_Sel_Item")?.Elements()
-                .Select(e => new InputItem(e.Value("Param"), e.Value("Title"), e.Value("Src_Name"))).Where(e => e.Id.Length > 0).ToArray() ?? [];
+                .Select(e => new InputItem(e.Value("Param"), e.Value("Title"), e.Value("Src_Name"))).Where(e => e.Id.Length > 0)
+                // One shared order for the input folder, dial preview and dial apply.
+                .OrderBy(i => i.Id switch { "NET RADIO" => 0, "TUNER" => 1, _ => 2 }).ToArray() ?? [];
             await ReadPresets();
         }
         await RefreshInternal();

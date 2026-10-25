@@ -10,6 +10,8 @@ internal static class Tests
     {
         var f = new FakeTransport(); using var r = Make(f); await r.RefreshAsync();
         Assert(r.State.Available && r.Inputs.Length == 6 && r.Presets.Length == 2, "identity, inputs and actual stored presets");
+        Assert(r.Inputs.Select(i => i.Id).SequenceEqual(new[] { "NET RADIO", "TUNER", "Spotify", "SERVER", "AirPlay", "OPTICAL" }), "NET RADIO and FM are adjacent first; other inputs retain receiver order");
+        Assert(r.Inputs[0].Tag == "NET_RADIO" && r.Inputs[1].Tag == "Tuner" && f.Writes.Count == 0, "input ordering preserves API identities and never selects an input");
         await r.SetVolumeAsync(-2); Assert(f.Volume == 0, "volume lower bound");
         await r.SetVolumeAsync(150); Assert(f.Volume == 100, "volume upper bound");
         r.Settings.MaxVolume = 35; await r.SetVolumeAsync(70); Assert(f.Volume == 35, "configured volume ceiling");
@@ -149,7 +151,7 @@ internal sealed class FakeTransport : IYamahaTransport
             if (request.Descendants("Config").Any()) return XElement.Parse("<YAMAHA_AV RC='0'><System><Config><Model_Name>R-N301</Model_Name><System_ID>TEST</System_ID></Config></System></YAMAHA_AV>");
             if (request.Descendants("Input_Sel_Item").Any())
             {
-                var items = new[] { "NET RADIO", "TUNER", "SERVER", "Spotify", "AirPlay", "OPTICAL" }.Select((i, n) => new XElement("Item_" + n, new XElement("Param", i), new XElement("Title", i), new XElement("Src_Name", i == "NET RADIO" ? "NET_RADIO" : i == "TUNER" ? "Tuner" : i == "OPTICAL" ? "" : i)));
+                var items = new[] { "Spotify", "NET RADIO", "SERVER", "AirPlay", "TUNER", "OPTICAL" }.Select((i, n) => new XElement("Item_" + n, new XElement("Param", i), new XElement("Title", i), new XElement("Src_Name", i == "NET RADIO" ? "NET_RADIO" : i == "TUNER" ? "Tuner" : i == "OPTICAL" ? "" : i)));
                 return Wrap(new XElement("Main_Zone", new XElement("Input", new XElement("Input_Sel_Item", items))));
             }
             if (request.Descendants("Preset_Sel_Item").Any()) return XElement.Parse("<YAMAHA_AV RC='0'><Tuner><Play_Control><Preset><Preset_Sel_Item><Item_1><Param>1</Param><Title>FM 1</Title></Item_1><Item_2><Param>4</Param><Title>FM 4</Title></Item_2></Preset_Sel_Item></Preset></Play_Control></Tuner></YAMAHA_AV>");

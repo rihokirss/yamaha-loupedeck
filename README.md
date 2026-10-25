@@ -24,6 +24,7 @@ Open your **Yamaha** workspace in the Windows default profile. The reference lay
 - Power button and wheel status: green **SEES** (on), gray **OOTEL** (standby), red **ÜHENDUS PUUDUB** (no connection). A disconnected receiver is never presented as merely in standby, even if its last known power state was on.
 - Radio favorites: white Lucide icons. The active playing station has an amber glow and dot. Green power, amber mute, violet inputs and rose media retain separate functional colors.
 - The lower eight touchscreen buttons follow the confirmed active input: NET RADIO favorites, TUNER stored FM presets, SERVER transport plus shuffle/repeat, or Spotify/AirPlay transport. Passive inputs and unavailable actions leave black, inactive slots. **Meedia** also follows the source and shows FM presets only on TUNER. See [the source-by-source table](LAYOUT.md).
+- Input selection and the L2 dial share this order: **NET RADIO → TUNER (FM) → all remaining inputs in receiver order**. One dial step switches the preview directly between the two radio sources; press L2 to apply it, as before.
 - FM RDS: the wheel shows the station's Program Service name and current Radio Text (A, or B when A is empty). Preset buttons and the FM menu learn station names while you listen; frequency remains visible and no background station scan is performed.
 - Physical left/right arrows: previous/next only while the Yamaha workspace is active. Elsewhere they send normal left/right arrow keys; their Fn actions are unchanged. If workspace detection fails, they fall back to normal arrows.
 
