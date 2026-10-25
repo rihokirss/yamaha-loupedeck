@@ -21,6 +21,7 @@ Open your **Yamaha** workspace in the Windows default profile. The reference lay
 - Large wheel: volume in single steps, with immediate amber arc feedback. No duplicate volume number in the center.
 - Wheel screen: source, large station name, and the song/program metadata supplied by the receiver. Lower left/right touch targets select previous/next; the center toggles playback.
 - Upper-left dial: volume number, or `Mute`, `Off`, `Offline`; press to mute. Muting changes the arc to violet.
+- Power button and wheel status: green **SEES** (on), gray **OOTEL** (standby), red **ÜHENDUS PUUDUB** (no connection). A disconnected receiver is never presented as merely in standby, even if its last known power state was on.
 - Radio favorites: white Lucide icons. The active playing station has an amber glow and dot. Green power, amber mute, violet inputs and rose media retain separate functional colors.
 - Physical left/right arrows: previous/next only while the Yamaha workspace is active. Elsewhere they send normal left/right arrow keys; their Fn actions are unchanged. If workspace detection fails, they fall back to normal arrows.
 
@@ -112,6 +113,8 @@ The installer backs up the System profile, local plugins, Yamaha settings and Lo
 Do not run it blindly against another user's profile. To adapt the merge helper, inspect your profile's existing arrow actions and choose the desired workspace button in `tools/prepare_profile.py`, after backing up that profile.
 
 ## Recovery and exports
+
+For an already installed plugin, `tools/update_plugin.ps1 -Dotnet <dotnet executable>` updates only the plugin after taking a backup. It does not recreate workspaces or overwrite button assignments, and verifies the CT application-profile files are unchanged. The Loupedeck service restarts briefly; other applications do not need a restart.
 
 Every installation creates `backups/yamaha-install-<timestamp>/`. The original pre-Yamaha snapshot is also retained in `backups/yamaha-pre-install-20261024-212441/`. These are private and ignored by Git.
 

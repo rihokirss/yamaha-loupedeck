@@ -21,8 +21,10 @@ public sealed class ReceiverCommand : PluginDynamicCommand
     protected override string GetCommandDisplayName(string parameter, PluginImageSize size) => Label(parameter);
     protected override BitmapImage GetCommandImage(string id, PluginImageSize size)
     {
-        var p = YamahaPlugin.Current; if (p?.Receiver == null) return Artwork.Icon("radio", "Connecting", Artwork.Gray);
+        var p = YamahaPlugin.Current;
+        if (p?.Receiver == null) return id == "power" ? Artwork.Power(false, false) : Artwork.Icon("radio", "Connecting", Artwork.Gray);
         p.Touch(); var s = p.Receiver.State;
+        if (id == "power") return Artwork.Power(s.Available, s.Power);
         if (id == "play") return Artwork.GlowGlyph(s.Playback == "Play" ? "pause" : "play", Artwork.Violet, s.Playback == "Play");
         var label = id switch { "power" => s.Power ? "Power On" : "Standby", "mute" => s.Muted ? "Muted" : "Mute", "previous" => "Previous", "next" => "Next", "stop" => "Stop", "shuffle" => "Shuffle", "repeat" => "Repeat", _ => id };
         var icon = id switch { "power" => "power", "mute" => s.Muted ? "volume-x" : "volume-2", "previous" => "skip-back", "next" => "skip-forward", "stop" => "square", "shuffle" => "shuffle", "repeat" => "repeat", _ => "radio" };

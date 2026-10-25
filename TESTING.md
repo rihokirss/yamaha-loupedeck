@@ -1,5 +1,14 @@
 # Verification record · 2026-10-24
 
+## Power-feedback update · 2026-10-25 (1.0.2)
+
+- Power tile and wheel now explicitly distinguish green `SEES`, gray `OOTEL`, and red `ÜHENDUS PUUDUB`.
+- Preview checks cover on, standby, offline, and offline-after-last-known-on states; both surfaces use the same labels/colors. Disconnected views hide stale media metadata, and startup no longer shows an on-state demo as live feedback.
+- All six preview images were visually checked. The installed service reports `Normal`; its live power icon contains `SEES`, and its rendered wheel shows the same state. Installed DLL hash matches the tested build.
+- Plugin-only updater created a complete plugin/settings/profile backup and verified every CT application-profile file stayed unchanged. No receiver power, volume, input or playback commands were sent during this update.
+- The core suite passed **21/21** in an isolated rerun. An earlier run hit the existing volume-pump timing assertion under load; volume-pump code was not changed by this UI update. Keep that timing sensitivity in mind when rerunning tests on a busy machine.
+- Standby/offline visuals were simulated; a physical remote-control power transition and cable-disconnect check remain manual so current radio playback was not interrupted.
+
 ## Automated checks
 
 - Release plugin build: zero warnings, zero errors.

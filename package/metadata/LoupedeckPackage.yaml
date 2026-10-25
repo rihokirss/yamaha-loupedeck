@@ -3,7 +3,7 @@ name: YamahaDirect
 displayName: Yamaha R-N301 Direct
 description: Direct LAN receiver control with live status and radio favorites
 pluginFileName: YamahaDirectPlugin.dll
-version: 1.0.1
+version: 1.0.2
 author: rihokirss
 minimumLoupedeckVersion: 6.4
 pluginFolderWin: bin

@@ -21,9 +21,9 @@ AssemblyLoadContext.Default.ResolvingUnmanagedDll += (_, name) =>
 var plugin = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(root, "Yamaha.Loupedeck/bin/Release/YamahaDirectPlugin.dll"));
 var art = plugin.GetType("Loupedeck.YamahaDirectPlugin.Artwork")!;
 var api = Assembly.Load("PluginApi");
-void SaveRaster(object image, string path)
+void SaveRaster(object image, string path, int width = 180)
 {
-    var encoded = (string)image.GetType().GetMethod("ToBitmapBase64String", [typeof(int)])!.Invoke(image, [180])!;
+    var encoded = (string)image.GetType().GetMethod("ToBitmapBase64String", [typeof(int)])!.Invoke(image, [width])!;
     File.WriteAllBytes(path, Convert.FromBase64String(encoded));
 }
 var flags = BindingFlags.NonPublic | BindingFlags.Static;
@@ -33,14 +33,36 @@ for (var n = 0; n < names.Length; n++)
 {
     var icon = n == 0 ? "power" : n == 1 ? "volume-2" : n == 2 ? "cable" : n == 3 ? "sliders-horizontal" : "radio";
     var colors = new[] { "#7BD89A", "#FFAD47", "#AB93FA", "#FF7597", "#FFAD47", "#AB93FA", "#FF7597", "#7BD89A", "#FF815E", "#D7C171", "#F47182", "#A9A2F5" };
-    var image = n >= 4 ? art.GetMethod("StationGlyph", flags)!.Invoke(null, [n == 6, true])! : art.GetMethod("GlowGlyph", flags)!.Invoke(null, [icon, colors[n], n == 0])!;
+    var image = n == 0 ? art.GetMethod("Power", flags)!.Invoke(null, [true, true])! : n >= 4 ? art.GetMethod("StationGlyph", flags)!.Invoke(null, [n == 6, true])! : art.GetMethod("GlowGlyph", flags)!.Invoke(null, [icon, colors[n], false])!;
     var target = Path.Combine(output, $"button-{n+1:00}.png");
     SaveRaster(image, target);
     Console.WriteLine(target);
 }
 var status = art.GetMethod("Wheel", flags)!.Invoke(null, [true, true, false, 35, "NET RADIO", "Raadio Kuku", "Hetkel eetris: EMALAEV", "Play", ""])!;
-var wheelBase64 = (string)status.GetType().GetMethod("ToBitmapBase64String", [typeof(int)])!.Invoke(status, [240])!;
-File.WriteAllBytes(Path.Combine(output, "wheel-status.png"), Convert.FromBase64String(wheelBase64));
+SaveRaster(status, Path.Combine(output, "wheel-status.png"), 240);
+foreach (var (available, power, label, name, color) in new[] {
+    (true, true, "SEES", "on", "#7BD89A"),
+    (true, false, "OOTEL", "standby", "#94A3B8"),
+    (false, false, "ÜHENDUS PUUDUB", "offline", "#EF4444"),
+    (false, true, "ÜHENDUS PUUDUB", "offline-last-on", "#EF4444") })
+{
+    var actualLabel = (string)art.GetMethod("PowerLabel", flags)!.Invoke(null, [available, power])!;
+    var actualColor = (string)art.GetMethod("PowerColor", flags)!.Invoke(null, [available, power])!;
+    if (actualLabel != label || actualColor != color) throw new Exception("Incorrect power visual state: " + name);
+    var powerSvg = (string)art.GetMethod("PowerSvg", flags)!.Invoke(null, [available, power])!;
+    if (label.Split(' ').Any(word => !powerSvg.Contains(">" + word + "<")) || !powerSvg.Contains(color)) throw new Exception("Missing readable power caption: " + name);
+    object[] wheelArgs = [available, power, false, 35, "NET RADIO", "Raadio Kuku", "Hetkel eetris", "Play", ""];
+    var wheelSvg = (string)art.GetMethod("WheelSvg", flags)!.Invoke(null, wheelArgs)!;
+    if (!wheelSvg.Contains(">" + label + "<")) throw new Exception("Wheel status differs from power button: " + name);
+    if (!available && wheelSvg.Contains("Hetkel eetris")) throw new Exception("Offline view shows stale media");
+    if (!power && wheelSvg.Contains("#7BD89A")) throw new Exception("Standby view still shows green on-state");
+    if (name != "offline-last-on")
+    {
+        SaveRaster(art.GetMethod("Power", flags)!.Invoke(null, [available, power])!, Path.Combine(output, "power-" + name + ".png"));
+        if (name != "on") SaveRaster(art.GetMethod("Wheel", flags)!.Invoke(null, wheelArgs)!, Path.Combine(output, "wheel-" + name + ".png"), 240);
+    }
+}
+Console.WriteLine("PASS power visuals: SEES / OOTEL / ÜHENDUS PUUDUB, matching button and wheel, no stale online state after disconnect");
 var combined = (string)api.GetType("Loupedeck.CombinedString")!.GetMethod("GetString", [typeof(string), typeof(string)])!.Invoke(null, ["YamahaDirect", "WheelToolYamahaNowPlaying"])!;
 Console.WriteLine("Wheel template identifier: " + combined);
 

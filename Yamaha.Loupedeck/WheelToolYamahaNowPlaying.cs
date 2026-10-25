@@ -22,7 +22,7 @@ public sealed class WheelToolYamahaNowPlaying : WheelToolGeneric
     protected override BitmapImage CreateImage()
     {
         var p = Plugin as YamahaDirectPlugin ?? YamahaDirectPlugin.Current;
-        if (p?.Receiver == null) return Artwork.Wheel(true, true, false, 35, "NET RADIO", "Raadio Kuku", "Hetkel eetris", "Play", "");
+        if (p?.Receiver == null) return Artwork.Wheel(false, false, false, 0, "", "", "", "Stop", "Connecting");
         var s = p.Receiver.State;
         return Artwork.Wheel(s.Available, s.Power, s.Muted, p.Volume.PendingTarget ?? s.Volume, s.Input, s.Station, s.Title, s.Playback, p.UiError.Length > 0 ? p.UiError : s.Error);
     }

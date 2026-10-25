@@ -31,4 +31,6 @@ NET RADIO: previous/next wrap the eight configured favorites. TUNER: navigate ac
 
 Black background, unboxed Lucide geometry. Power is green, mute/volume amber, inputs violet, media/track rose. Radio and FM preset icons are white; an active station has an amber glow and dot. The wheel uses warm cream main text, muted lavender secondary text, an amber/coral volume arc, and a violet arc while muted. The number remains beside L1 rather than duplicating it in the wheel center.
 
+The power tile includes a readable state caption: green **SEES**, gray **OOTEL**, or red **ÜHENDUS PUUDUB**. The same state appears at the top of the wheel. These indicate reported receiver power/availability, independently of whether media is currently playing.
+
 The two original Windows workspaces and their touch/encoder/wheel pages are retained. Shared square-button left/right presses now route by the active workspace; all their Fn mappings and other square buttons remain unchanged. Other application profiles are not edited.
